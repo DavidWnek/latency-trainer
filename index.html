@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Peek Latency Trainer</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <main id="stage">
+        <canvas id="view"></canvas>
+        <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+        <div id="vignette"></div>
+        <div id="hud"></div>
+        <div id="banner"></div>
+        <section id="timeline" hidden></section>
+      </main>
+
+      <aside id="panel">
+        <h1>Peek Latency Trainer</h1>
+        <p class="sub">
+          Hold the angle. A peeker will swing the corner at a random moment — click or tap
+          (or press <kbd>Space</kbd>) the instant he appears.
+        </p>
+
+        <button id="survey-open" type="button" class="secondary">Take the questionnaire</button>
+
+        <form id="settings">
+          <label class="wide">Scenario
+            <select name="scenario">
+              <option value="shoot">Hold &amp; shoot — click or tap to fire when he appears</option>
+              <option value="dodge">Dodge — click or tap to step behind the wall on your left</option>
+            </select>
+          </label>
+          <label>Mode
+            <select name="mode">
+              <option value="sweep">Sweep all latencies</option>
+              <option value="fixed">Single latency (endless)</option>
+            </select>
+          </label>
+          <label>Vary latency of
+            <select name="target">
+              <option value="bot">Peeker (bot)</option>
+              <option value="you">You (defender)</option>
+            </select>
+          </label>
+          <label data-mode="fixed">Latency (ping)
+            <select name="fixedLatency"></select>
+          </label>
+          <label data-mode="sweep">Rounds per latency
+            <input name="roundsPer" type="number" min="1" max="50" value="5" />
+          </label>
+          <label>Bot base ping (ms)
+            <input name="botPing" type="number" min="0" max="1000" value="20" />
+          </label>
+          <label>Your base ping (ms)
+            <input name="yourPing" type="number" min="0" max="1000" value="20" />
+          </label>
+          <label>Bot jitter (ms)
+            <input name="botJitter" type="number" min="0" max="500" value="0" />
+          </label>
+          <label>Bot packet loss (%)
+            <input name="botLoss" type="number" min="0" max="90" value="0" />
+          </label>
+          <label>Your jitter (ms)
+            <input name="yourJitter" type="number" min="0" max="500" value="0" />
+          </label>
+          <label>Your packet loss (%)
+            <input name="yourLoss" type="number" min="0" max="90" value="0" />
+          </label>
+          <label>Server tick rate
+            <select name="tickRate">
+              <option value="128">128 Hz</option>
+              <option value="64">64 Hz</option>
+              <option value="30">30 Hz</option>
+              <option value="20">20 Hz</option>
+            </select>
+          </label>
+          <label>Interp buffer
+            <select name="interpTicks">
+              <option value="2">2 ticks</option>
+              <option value="1">1 tick</option>
+            </select>
+          </label>
+          <label>Bot reaction (ms)
+            <input name="botReaction" type="number" min="0" max="1000" value="250" />
+          </label>
+          <label>Bot aim time (ms)
+            <input name="botAim" type="number" min="0" max="1000" value="150" />
+          </label>
+          <label>Move speed (m/s)
+            <input name="peekSpeed" type="number" min="1" max="12" step="0.5" value="5.5" />
+          </label>
+          <div class="wide probe">
+            <button id="probe" type="button">Measure my connection</button>
+            <span id="probe-result">Times real round trips from this device. Open the app on your phone over Wi-Fi to see what Wi-Fi adds.</span>
+          </div>
+        </form>
+        <p class="hint">Ping is round-trip; each direction is half. The varied side uses the
+          test value, the other side its base ping. Jitter adds a random 0–N ms to every
+          packet; lost packets never arrive.</p>
+
+        <button id="start" class="primary">Start test</button>
+
+        <h2>Results</h2>
+        <table id="stats">
+          <thead>
+            <tr><th>Ping</th><th>n</th><th>Median RT</th><th>Peek adv.</th><th>Window</th><th>Won</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p id="cover-note" class="hint"></p>
+        <div class="row">
+          <button id="csv">Export CSV</button>
+          <button id="clear">Clear results</button>
+        </div>
+
+        <h2>Your experience vs. the test</h2>
+        <div id="compare"></div>
+
+        <details>
+          <summary>What the columns mean</summary>
+          <dl>
+            <dt>Bot reaction / aim time</dt><dd>He notices you after his reaction time, then turns and raises his gun over the aim time before firing.</dd>
+            <dt>Median RT</dt><dd>Your reaction: click or tap time minus the first frame he was drawn.</dd>
+            <dt>Peek adv.</dt><dd>How long he could see you before you could see him.</dd>
+            <dt>Window</dt><dd>Longest reaction that still wins outright — your shot has to reach the server a tick before his. In Dodge: the latest you can start moving and still get off his screen before he fires.</dd>
+            <dt>Won</dt><dd>Outright wins, or escapes in Dodge. Trades and no-reactions count as losses.</dd>
+            <dt>Killed behind cover</dt><dd>Dodge only: your screen already had you fully behind the wall when the kill arrived. The server accepted his shot because his screen still showed you in the open.</dd>
+          </dl>
+          <p>The server is tick-based and lag-compensated: each shot is judged against what its
+            shooter saw. The peeker's ping delays both his appearance on your screen and his
+            shot by the same amount, so it mostly cancels. Your own ping hits you twice: once
+            seeing him, once getting your shot back to the server. Display and input lag on
+            your machine are not modelled.</p>
+        </details>
+      </aside>
+    </div>
+
+    <dialog id="survey">
+      <form id="survey-form" method="dialog">
+        <h2>What happens in your real matches?</h2>
+        <p class="hint">Answer from memory. Each answer is compared with what the test measures, so play the suggested tests afterwards.</p>
+        <div id="survey-questions"></div>
+        <div class="row">
+          <button value="cancel" formnovalidate>Cancel</button>
+          <button value="save" class="primary">Save answers</button>
+        </div>
+      </form>
+    </dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
